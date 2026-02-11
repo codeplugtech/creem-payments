@@ -17,6 +17,7 @@ use Codeplugtech\CreemPayments\Subscription;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -46,49 +47,68 @@ class WebhookController extends Controller
 
     protected function handleCheckoutCompleted(array $payload)
     {
-        $data = $payload['object'];
-        if (!isset($data['subscription'])) {
-            return;
-        }
-        $subscriptionData = $data['subscription'];
-        $customerData = $data['customer'];
-        $orderData = $data['order'];
-        if ($this->findSubscription($subscriptionData['id'])) {
-            $billable = $this->findCustomer($customerData['email']);
-            $billable->transactions()->updateOrCreate([
-                'payment_id' => $orderData['transaction'],
-            ], [
-                'subscription_id' => $subscriptionData['id'],
-                'status' => $orderData['status'],
-                'total' => $orderData['amount'],
-                'tax' => $orderData['tax_amount'],
-                'currency' => $orderData['currency'],
-                'billed_at' => Carbon::parse($orderData['created_at']),
-            ]);
-        }
+        /* need to Implement */
     }
 
     protected function handleSubscriptionActive(array $payload)
     {
-        $subscriptionData = $payload['object'];
-        $customerData = $subscriptionData['customer'];
-        if (!$this->findSubscription($subscriptionData['id'])) {
-            $billable = $this->findCustomer($customerData['email']);
-            $billable->subscriptions()->create([
-                'type' => $subscriptionData['metadata']['type'],
-                'subscription_id' => $subscriptionData['id'],
-                'product_id' => $subscriptionData['product']['id'],
-                'status' => $subscriptionData['status'],
-                'next_billing_at' => $subscriptionData['current_period_end_date'] ?? null,
-            ]);
-        }
         $this->updateSubscriptionStatus($payload, SubscriptionStatusEnum::ACTIVE->value, SubscriptionActive::class);
     }
 
-    protected function handleSubscriptionPaid(array $payload)
+    protected function handleSubscriptionPaid(array $payload): void
     {
-        $this->updateSubscriptionStatus($payload, SubscriptionStatusEnum::ACTIVE->value, SubscriptionPaid::class);
+        $object = $payload['object'] ?? [];
+
+        $transaction = $object['last_transaction'] ?? [];
+        $customer = $object['customer'] ?? [];
+        $product = $object['product'] ?? [];
+        $metadata = $object['metadata'] ?? [];
+
+        $subscriptionId = $transaction['subscription'] ?? null;
+        if (!$subscriptionId || empty($customer['email'])) {
+            return;
+        }
+
+        $billable = $this->findCustomer($customer['email']);
+
+        if (!$billable) {
+            return;
+        }
+
+        $subscription = $this->findSubscription($subscriptionId);
+        if (!$subscription) {
+            $billable->subscriptions()->create([
+                'type' => $metadata['type'] ?? null,
+                'subscription_id' => $subscriptionId,
+                'product_id' => $product['id'] ?? null,
+                'status' => $object['status'] ?? null,
+                'next_billing_at' => $object['current_period_end_date'] ?? null,
+            ]);
+        }
+
+        if (!empty($transaction['id'])) {
+            $billable->transactions()->updateOrCreate(
+                ['payment_id' => $transaction['id']],
+                [
+                    'subscription_id' => $subscriptionId,
+                    'status' => $transaction['status'] ?? null,
+                    'total' => $transaction['amount'] ?? 0,
+                    'tax' => $transaction['tax_amount'] ?? 0,
+                    'currency' => $transaction['currency'] ?? null,
+                    'billed_at' => isset($transaction['created_at'])
+                        ? Carbon::parse($transaction['created_at'])
+                        : now(),
+                ]
+            );
+        }
+
+        $this->updateSubscriptionStatus(
+            $payload,
+            SubscriptionStatusEnum::ACTIVE->value,
+            SubscriptionPaid::class
+        );
     }
+
 
     protected function handleSubscriptionCanceled(array $payload)
     {
