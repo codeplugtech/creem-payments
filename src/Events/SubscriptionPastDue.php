@@ -6,8 +6,7 @@ use Codeplugtech\CreemPayments\Subscription;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
-
-class SubscriptionActive
+class SubscriptionPastDue
 {
     use Dispatchable, SerializesModels;
 

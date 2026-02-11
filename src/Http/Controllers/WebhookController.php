@@ -8,6 +8,7 @@ use Codeplugtech\CreemPayments\Events\SubscriptionActive;
 use Codeplugtech\CreemPayments\Events\SubscriptionCanceled;
 use Codeplugtech\CreemPayments\Events\SubscriptionExpired;
 use Codeplugtech\CreemPayments\Events\SubscriptionPaid;
+use Codeplugtech\CreemPayments\Events\SubscriptionPastDue;
 use Codeplugtech\CreemPayments\Events\SubscriptionPaused;
 use Codeplugtech\CreemPayments\Events\SubscriptionUpdated;
 use Codeplugtech\CreemPayments\Events\SubscriptionTrialing;
@@ -16,8 +17,6 @@ use Codeplugtech\CreemPayments\Subscription;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -105,6 +104,11 @@ class WebhookController extends Controller
     {
         // Map expired to CANCELED as EXPIRED is not in the requested enum list
         $this->updateSubscriptionStatus($payload, SubscriptionStatusEnum::CANCELED->value, SubscriptionExpired::class);
+    }
+
+    protected function handleSubscriptionPastDue(array $payload)
+    {
+        $this->updateSubscriptionStatus($payload, SubscriptionStatusEnum::CANCELED->value, SubscriptionPastDue::class);
     }
 
     protected function handleSubscriptionTrialing(array $payload)
