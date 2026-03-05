@@ -4,6 +4,7 @@ namespace Codeplugtech\CreemPayments\Http\Controllers;
 
 use Codeplugtech\CreemPayments\CreemPayments;
 use Codeplugtech\CreemPayments\Enum\SubscriptionStatusEnum;
+use Codeplugtech\CreemPayments\Events\OneTimePaymentReceived;
 use Codeplugtech\CreemPayments\Events\SubscriptionActive;
 use Codeplugtech\CreemPayments\Events\SubscriptionCanceled;
 use Codeplugtech\CreemPayments\Events\SubscriptionExpired;
@@ -47,7 +48,47 @@ class WebhookController extends Controller
 
     protected function handleCheckoutCompleted(array $payload)
     {
-        /* need to Implement */
+        $data = $payload['object']; // The main object
+        $order = $data['order'] ?? [];
+
+        // CHECK: Is this One-Time or Recurring?
+        $type = $order['type'] ?? 'unknown';
+
+        if ($type === 'onetime') {
+            $this->handleOneTimePayment($data, $payload);
+        }
+    }
+
+    /**
+     * Specific Logic for One-Time Payments
+     */
+    protected function handleOneTimePayment(array $data, array $payload)
+    {
+        $customerData = $data['customer'] ?? [];
+        $email = $customerData['email'] ?? null;
+
+        if (!$email) {
+            return;
+        }
+
+        $billable = $this->findCustomer($email);
+        $order = $data['order'] ?? [];
+        $product = $data['product'] ?? [];
+        $transaction = $billable->transactions()->updateOrCreate(
+            ['payment_id' => $order['transaction']],
+            [
+                'subscription_id' => null,
+                'status'          => $order['status'] ?? 'paid',
+                'total'           => $order['amount'] ?? 0,
+                'currency'        => $order['currency'] ?? 'USD',
+                'billed_at'       => isset($order['created_at'])
+                    ? Carbon::parse($order['created_at'])
+                    : now(),
+            ]
+        );
+        if (class_exists(OneTimePaymentReceived::class)) {
+            OneTimePaymentReceived::dispatch($billable, $transaction, $payload);
+        }
     }
 
     protected function handleSubscriptionActive(array $payload)
