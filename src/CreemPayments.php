@@ -179,4 +179,23 @@ class CreemPayments
         return new Product($response->json());
     }
 
+    /**
+     * Screen / Moderate a prompt using Creem Moderation API
+     *
+     * @param string $input
+     * @param array $options (optional)
+     * @return array
+     * @throws CreemPaymentsException
+     */
+    public static function moderate(string $input, array $options = []): array
+    {
+        $payload = array_merge([
+            'input' => $input,
+        ], $options);
+
+        $response = static::api('post', 'moderation/screen-prompt', $payload);
+
+        return $response->json();
+    }
+
 }
