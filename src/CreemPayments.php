@@ -11,6 +11,7 @@ use Money\Currency;
 use Money\Formatter\IntlMoneyFormatter;
 use Money\Money;
 use NumberFormatter;
+use Illuminate\Support\Facades\Log;
 
 class CreemPayments
 {
@@ -195,7 +196,16 @@ class CreemPayments
 
         $response = static::api('post', 'moderation/prompt', $payload);
 
-        return $response->json();
+        $responseData = $response->json();
+
+        // Log the moderation API response
+        Log::info('Creem Moderation API Response', [
+            'endpoint' => 'moderation/prompt',
+            'response' => $responseData,
+            'status_code' => $response->status(),
+        ]);
+
+        return $responseData;
     }
 
 }
