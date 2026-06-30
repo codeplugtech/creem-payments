@@ -174,6 +174,26 @@ class WebhookController extends Controller
 
     protected function handleSubscriptionTrialing(array $payload)
     {
+        $data = $payload['object'] ?? [];
+        $customer = $data['customer'] ?? [];
+
+        if (!empty($data['id']) && !$this->findSubscription($data['id']) && !empty($customer['email'])) {
+            $billable = $this->findCustomer($customer['email']);
+            $metadata = $data['metadata'] ?? [];
+            $product = $data['product'] ?? [];
+
+            $billable->subscriptions()->create([
+                'type' => $metadata['type'] ?? 'Trial',
+                'subscription_id' => $data['id'],
+                'product_id' => is_array($product) ? ($product['id'] ?? '') : ($product ?: ''),
+                'status' => SubscriptionStatusEnum::TRIALING->value,
+                'next_billing_at' => isset($data['current_period_end_date']) ? Carbon::parse($data['current_period_end_date']) : null,
+                'trial_ends_at' => isset($data['trial_end_date'])
+                    ? Carbon::parse($data['trial_end_date'])
+                    : (isset($data['current_period_end_date']) ? Carbon::parse($data['current_period_end_date']) : null),
+            ]);
+        }
+
         $this->updateSubscriptionStatus($payload, SubscriptionStatusEnum::TRIALING->value, SubscriptionTrialing::class);
     }
 
@@ -202,7 +222,12 @@ class WebhookController extends Controller
 
         $subscription->update([
             'status' => $status,
-            'next_billing_at' => isset($data['current_period_end_date']) ? Carbon::parse($data['current_period_end_date']) : $subscription->next_billing_at
+            'next_billing_at' => isset($data['current_period_end_date']) ? Carbon::parse($data['current_period_end_date']) : $subscription->next_billing_at,
+            'trial_ends_at' => $status === SubscriptionStatusEnum::TRIALING->value
+                ? (isset($data['trial_end_date'])
+                    ? Carbon::parse($data['trial_end_date'])
+                    : (isset($data['current_period_end_date']) ? Carbon::parse($data['current_period_end_date']) : $subscription->trial_ends_at))
+                : $subscription->trial_ends_at,
         ]);
 
         $billable = $this->findCustomer($data['customer']['email']);
